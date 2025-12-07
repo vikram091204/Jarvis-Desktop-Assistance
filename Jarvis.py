@@ -11,11 +11,11 @@ import threading
 import speech_recognition as sr
 from difflib import SequenceMatcher
 import pyttsx3
-from functions import coder, settings, progress
+from functions import settings
 import ctypes
 
 
-class Jarvis:
+class Krishna:
     
     def __init__(self, mode="Microphone", speaker=True):
         self.recognizer = sr.Recognizer()
@@ -24,6 +24,7 @@ class Jarvis:
         self.power = None
         self.mode = mode
         self.speaker = speaker
+        self.assistant_name = "Krishna"
         self.user_name = "Abhay"
         self.commands = {
             "hi, hello, sus": self.greet,
@@ -38,6 +39,7 @@ class Jarvis:
             "open browser": self.open_browser,
             "open": self.open_app,
             "play, play song, play video, play music": self.play_media,
+            "find, search file, search folder, locate": self.find_and_open,
             "sleep, lock window": self.lock_window,
             "shutdown": self.shutdown,
             "restart": self.restart,
@@ -68,6 +70,50 @@ class Jarvis:
             self.speak("Sorry, my speech service is down.")
             return ""
         
+    def listen_for_wake_word(self):
+        """Listen for wake word 'Hi Krishna' or similar phrases"""
+        if self.mode == "Input":
+            user_input = input("Say wake word (Hi Krishna): ").lower()
+            wake_detected, command = self.check_wake_word(user_input)
+            return wake_detected, command
+        
+        with self.microphone as source:
+            self.recognizer.adjust_for_ambient_noise(source, duration=0.5)
+            print("Waiting for wake word 'Hi Krishna'...")
+            try:
+                audio = self.recognizer.listen(source, timeout=None, phrase_time_limit=5)
+                query = self.recognizer.recognize_google(audio).lower()
+                print(f"Heard: {query}")
+                wake_detected, command = self.check_wake_word(query)
+                return wake_detected, command
+            except sr.UnknownValueError:
+                return False, None
+            except sr.RequestError:
+                return False, None
+            except Exception:
+                return False, None
+    
+    def check_wake_word(self, query):
+        """Check if query contains wake word and extract any command after it"""
+        wake_words = ["krishna", "hi krishna", "hey krishna", "hello krishna", "ok krishna"]
+        
+        for wake_word in wake_words:
+            if wake_word in query:
+                # Extract command after wake word
+                parts = query.split(wake_word, 1)
+                if len(parts) > 1 and parts[1].strip():
+                    command = parts[1].strip()
+                    print(f"[DEBUG] Wake word detected with command: '{command}'")
+                    return True, command
+                return True, None
+            
+            # Fuzzy matching for variations
+            ratio = SequenceMatcher(None, query, wake_word).ratio()
+            if ratio > 0.7:
+                return True, None
+        
+        return False, None
+
     def speak(self, text):
         print(text)
         
@@ -97,15 +143,37 @@ class Jarvis:
         best_match = None
         best_ratio = 0
         best_cmd = None
+        best_cmd_length = 0
 
         for cmd, action in self.commands.items():
-            ratio = self.similar(query, cmd.split(','))
-            if ratio > best_ratio:
-                best_ratio = ratio
-                best_match = action
-                best_cmd = cmd
+            # Split commands and check each variant
+            cmd_variants = [c.strip() for c in cmd.split(',')]
+            
+            for variant in cmd_variants:
+                # Check for exact substring match first (highest priority)
+                if variant in query or query in variant:
+                    ratio = SequenceMatcher(None, query, variant).ratio()
+                    # Prioritize longer matches (more specific commands)
+                    variant_length = len(variant)
+                    
+                    # Update if better ratio, or same ratio but longer command
+                    if ratio > best_ratio or (ratio == best_ratio and variant_length > best_cmd_length):
+                        best_ratio = ratio
+                        best_match = action
+                        best_cmd = cmd
+                        best_cmd_length = variant_length
+                else:
+                    # Fuzzy matching for non-exact matches
+                    ratio = SequenceMatcher(None, query, variant).ratio()
+                    if ratio > best_ratio:
+                        best_ratio = ratio
+                        best_match = action
+                        best_cmd = cmd
+                        best_cmd_length = len(variant)
 
-        if best_ratio > 0.6 and best_match:
+        if best_ratio > 0.5 and best_match:
+            # Debug output
+            print(f"[DEBUG] Matched command: '{best_cmd}' with ratio: {best_ratio:.2f}")
             # Try calling the action with the original query first. Many
             # existing actions have no parameters, so catch TypeError and call
             # without arguments in that case.
@@ -114,6 +182,7 @@ class Jarvis:
             except TypeError:
                 return best_match()
 
+        print(f"[DEBUG] No match found for query: '{query}' (best ratio: {best_ratio:.2f})")
         return "Sorry, I didn't understand what you meant."
     
     def similar(self, query, commands):
@@ -196,11 +265,87 @@ class Jarvis:
         if not app_query:
             return "No application specified."
         app = app_query.lower()
+        
+        print(f"[DEBUG] open_app called with: '{app_query}' -> processed as: '{app}'")
 
         # Strip common leading verbs such as 'open'
         for prefix in ("open ", "please open ", "could you open "):
             if app.startswith(prefix):
                 app = app[len(prefix):].strip()
+                print(f"[DEBUG] After stripping prefix: '{app}'")
+
+        # Platform/Website detection - opens in browser if app not installed
+        platforms = {
+            # Social Media
+            'youtube': 'https://www.youtube.com',
+            'facebook': 'https://www.facebook.com',
+            'instagram': 'https://www.instagram.com',
+            'twitter': 'https://www.twitter.com',
+            'x': 'https://www.x.com',
+            'linkedin': 'https://www.linkedin.com',
+            'reddit': 'https://www.reddit.com',
+            'tiktok': 'https://www.tiktok.com',
+            'snapchat': 'https://www.snapchat.com',
+            'pinterest': 'https://www.pinterest.com',
+            'whatsapp': 'https://web.whatsapp.com',
+            'telegram': 'https://web.telegram.org',
+            'discord': 'https://discord.com/app',
+            
+            # Entertainment
+            'netflix': 'https://www.netflix.com',
+            'prime video': 'https://www.primevideo.com',
+            'amazon prime': 'https://www.primevideo.com',
+            'spotify': 'https://open.spotify.com',
+            'twitch': 'https://www.twitch.tv',
+            
+            # Professional/Productivity
+            'gmail': 'https://mail.google.com',
+            'google drive': 'https://drive.google.com',
+            'drive': 'https://drive.google.com',
+            'google docs': 'https://docs.google.com',
+            'google sheets': 'https://sheets.google.com',
+            'google slides': 'https://slides.google.com',
+            'outlook': 'https://outlook.live.com',
+            'onedrive': 'https://onedrive.live.com',
+            'dropbox': 'https://www.dropbox.com',
+            
+            # Development
+            'github': 'https://github.com',
+            'gitlab': 'https://gitlab.com',
+            'stack overflow': 'https://stackoverflow.com',
+            'stackoverflow': 'https://stackoverflow.com',
+            
+            # Shopping
+            'amazon': 'https://www.amazon.com',
+            'flipkart': 'https://www.flipkart.com',
+            'ebay': 'https://www.ebay.com',
+            
+            # Other
+            'google': 'https://www.google.com',
+            'maps': 'https://maps.google.com',
+            'google maps': 'https://maps.google.com',
+            'translate': 'https://translate.google.com',
+            'google translate': 'https://translate.google.com',
+        }
+
+        # Check if user wants to open a platform/website
+        print(f"[DEBUG] Checking platforms for: '{app}'")
+        for platform, url in platforms.items():
+            # Check exact match or substring
+            if platform in app or app in platform:
+                print(f"[DEBUG] Matched platform: '{platform}'")
+                webbrowser.open(url)
+                message = f"Opening {platform.title()} in browser."
+                self.speak(message)
+                return message
+            # Fuzzy match for speech recognition errors
+            ratio = SequenceMatcher(None, app, platform).ratio()
+            if ratio > 0.6:
+                print(f"[DEBUG] Fuzzy matched platform: '{platform}' with ratio {ratio:.2f}")
+                webbrowser.open(url)
+                message = f"Opening {platform.title()} in browser."
+                self.speak(message)
+                return message
 
         mapping = {
             'file manager': 'explorer',
@@ -434,6 +579,145 @@ class Jarvis:
         webbrowser.open(yt_search)
         return f"Searched YouTube for {target}"
 
+    def find_and_open(self, query=None):
+        """Find a file or folder by name and open it (or open containing folder and select file).
+        Searches common user folders, including OneDrive if available. If multiple
+        matches are found, presents up to 5 choices and accepts a voice selection
+        (number or spoken name).
+        """
+        if query:
+            q = query
+        else:
+            self.speak("What file or folder should I find?")
+            q = self.listen()
+
+        if not q:
+            return "No filename provided."
+
+        # Remove leading verbs
+        for prefix in ("find ", "search ", "search for ", "locate "):
+            if q.startswith(prefix):
+                q = q[len(prefix):].strip()
+
+        target = q.lower()
+
+        user_home = os.path.expanduser('~')
+        # detect OneDrive paths
+        onedrive_candidates = [
+            os.environ.get('OneDrive'),
+            os.environ.get('OneDriveCommercial'),
+            os.environ.get('OneDriveConsumer'),
+            os.path.join(user_home, 'OneDrive')
+        ]
+        search_dirs = [
+            os.path.join(user_home, 'Desktop'),
+            os.path.join(user_home, 'Documents'),
+            os.path.join(user_home, 'Downloads'),
+            os.path.join(user_home, 'Pictures'),
+            os.path.join(user_home, 'Videos'),
+            user_home,
+            os.path.join(os.getcwd(), 'data', 'files')
+        ]
+        for p in onedrive_candidates:
+            if p and os.path.exists(p) and p not in search_dirs:
+                search_dirs.insert(0, p)
+
+        # Collect matches (path, score)
+        matches = []
+        best = (None, 0.0)
+
+        for base in search_dirs:
+            if not os.path.exists(base):
+                continue
+            for root, dirs, files in os.walk(base):
+                for d in dirs:
+                    name = d.lower()
+                    path = os.path.join(root, d)
+                    if target in name:
+                        matches.append((path, 1.0))
+                    else:
+                        score = SequenceMatcher(None, name, target).ratio()
+                        if score > best[1]:
+                            best = (path, score)
+                for f in files:
+                    name = f.lower()
+                    path = os.path.join(root, f)
+                    if target in name:
+                        matches.append((path, 1.0))
+                    else:
+                        score = SequenceMatcher(None, name, target).ratio()
+                        if score > best[1]:
+                            best = (path, score)
+
+        # If no direct substring matches, but a good fuzzy match exists, include it
+        if not matches and best[0] and best[1] >= 0.6:
+            matches.append(best)
+
+        if not matches:
+            msg = f"I couldn't find anything matching {q}."
+            self.speak(msg)
+            return msg
+
+        # Limit to top 5 matches, sorted by score descending
+        matches = sorted(matches, key=lambda x: x[1], reverse=True)[:5]
+
+        # If multiple matches, ask user to choose
+        if len(matches) > 1:
+            speak_list = []
+            for idx, (path, score) in enumerate(matches, start=1):
+                kind = 'folder' if os.path.isdir(path) else 'file'
+                name = os.path.basename(path)
+                speak_list.append(f"{idx}. {name} ({kind})")
+            self.speak("I found multiple matches:")
+            for item in speak_list:
+                self.speak(item)
+            self.speak("Which one should I open? Say the number or speak the name.")
+            choice = self.listen()
+            if not choice:
+                return "No selection made."
+
+            # try to parse a number
+            import re
+            m = re.search(r"\d+", choice)
+            selected_path = None
+            if m:
+                n = int(m.group(0))
+                if 1 <= n <= len(matches):
+                    selected_path = matches[n-1][0]
+            if not selected_path:
+                # try fuzzy match against basenames
+                best_choice = (None, 0.0)
+                for path, score in matches:
+                    name = os.path.basename(path).lower()
+                    s = SequenceMatcher(None, choice, name).ratio()
+                    if s > best_choice[1]:
+                        best_choice = (path, s)
+                if best_choice[1] >= 0.5:
+                    selected_path = best_choice[0]
+                else:
+                    self.speak("Sorry, I couldn't understand your selection.")
+                    return "Selection not understood."
+        else:
+            selected_path = matches[0][0]
+
+        # Open folder or file (select file in explorer)
+        try:
+            if os.path.isdir(selected_path):
+                os.startfile(selected_path)
+                msg = f"Opened folder {os.path.basename(selected_path)}."
+            else:
+                try:
+                    subprocess.Popen(["explorer", f"/select,{selected_path}"])
+                    msg = f"Opened containing folder and selected {os.path.basename(selected_path)}."
+                except Exception:
+                    os.startfile(selected_path)
+                    msg = f"Opened file {os.path.basename(selected_path)}."
+        except Exception as e:
+            msg = f"Found item but failed to open: {e}"
+
+        self.speak(msg)
+        return msg
+
     def lock_window(self):
         message = "Locking the window."
         self.speak(message)
@@ -500,12 +784,17 @@ class Jarvis:
 
 
 def main():
-    jarvis = Jarvis(mode="Microphone", speaker=True)
+    krishna = Krishna(mode="Microphone", speaker=True)
+    print(f"Krishna Assistant initialized. Say 'Hi Krishna' to activate.")
     try:
         while True:
-            query = jarvis.listen()
-            if query:
-                jarvis.process_query(query)
+            # Wait for wake word
+            if krishna.listen_for_wake_word():
+                krishna.speak("Yes, I'm listening!")
+                # Listen for command
+                query = krishna.listen()
+                if query:
+                    krishna.process_query(query)
     except KeyboardInterrupt:
         print("Exiting program...")
         sys.exit(0)

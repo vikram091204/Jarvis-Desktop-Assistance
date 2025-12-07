@@ -15,7 +15,7 @@ from functions import settings
 import ctypes
 
 
-class Krishna:
+class Siri:
     
     def __init__(self, mode="Microphone", speaker=True):
         self.recognizer = sr.Recognizer()
@@ -24,7 +24,7 @@ class Krishna:
         self.power = None
         self.mode = mode
         self.speaker = speaker
-        self.assistant_name = "Krishna"
+        self.assistant_name = "Siri"
         self.user_name = "Abhay"
         self.commands = {
             "hi, hello, sus": self.greet,
@@ -35,8 +35,6 @@ class Krishna:
             "empty recycle bin": self.empty_recycle_bin,
             "restore recycle bin": self.restore_recycle_bin,
             "where is": self.where_is,
-            "open camera, click photo": self.open_camera,
-            "open browser": self.open_browser,
             "open": self.open_app,
             "play, play song, play video, play music": self.play_media,
             "find, search file, search folder, locate": self.find_and_open,
@@ -71,15 +69,15 @@ class Krishna:
             return ""
         
     def listen_for_wake_word(self):
-        """Listen for wake word 'Hi Krishna' or similar phrases"""
+        """Listen for wake word 'Hi Siri' or similar phrases"""
         if self.mode == "Input":
-            user_input = input("Say wake word (Hi Krishna): ").lower()
+            user_input = input("Say wake word (Hi Siri): ").lower()
             wake_detected, command = self.check_wake_word(user_input)
             return wake_detected, command
         
         with self.microphone as source:
             self.recognizer.adjust_for_ambient_noise(source, duration=0.5)
-            print("Waiting for wake word 'Hi Krishna'...")
+            print("Waiting for wake word 'Hi Siri'...")
             try:
                 audio = self.recognizer.listen(source, timeout=None, phrase_time_limit=5)
                 query = self.recognizer.recognize_google(audio).lower()
@@ -95,7 +93,7 @@ class Krishna:
     
     def check_wake_word(self, query):
         """Check if query contains wake word and extract any command after it"""
-        wake_words = ["krishna", "hi krishna", "hey krishna", "hello krishna", "ok krishna"]
+        wake_words = ["siri", "hi siri", "hey siri", "hello siri", "ok siri"]
         
         for wake_word in wake_words:
             if wake_word in query:
@@ -103,7 +101,7 @@ class Krishna:
                 parts = query.split(wake_word, 1)
                 if len(parts) > 1 and parts[1].strip():
                     command = parts[1].strip()
-                    print(f"[DEBUG] Wake word detected with command: '{command}'")
+
                     return True, command
                 return True, None
             
@@ -143,6 +141,7 @@ class Krishna:
         best_match = None
         best_ratio = 0
         best_cmd = None
+        best_variant = None
         best_cmd_length = 0
 
         for cmd, action in self.commands.items():
@@ -161,6 +160,7 @@ class Krishna:
                         best_ratio = ratio
                         best_match = action
                         best_cmd = cmd
+                        best_variant = variant
                         best_cmd_length = variant_length
                 else:
                     # Fuzzy matching for non-exact matches
@@ -169,11 +169,12 @@ class Krishna:
                         best_ratio = ratio
                         best_match = action
                         best_cmd = cmd
+                        best_variant = variant
                         best_cmd_length = len(variant)
 
-        if best_ratio > 0.5 and best_match:
-            # Debug output
-            print(f"[DEBUG] Matched command: '{best_cmd}' with ratio: {best_ratio:.2f}")
+        # Increased threshold from 0.5 to 0.7 to prevent false matches
+        if best_ratio >= 0.7 and best_match:
+            print(f"[DEBUG] Matched command: '{best_variant}' with ratio: {best_ratio:.2f}")
             # Try calling the action with the original query first. Many
             # existing actions have no parameters, so catch TypeError and call
             # without arguments in that case.
@@ -182,7 +183,7 @@ class Krishna:
             except TypeError:
                 return best_match()
 
-        print(f"[DEBUG] No match found for query: '{query}' (best ratio: {best_ratio:.2f})")
+
         return "Sorry, I didn't understand what you meant."
     
     def similar(self, query, commands):
@@ -266,13 +267,17 @@ class Krishna:
             return "No application specified."
         app = app_query.lower()
         
-        print(f"[DEBUG] open_app called with: '{app_query}' -> processed as: '{app}'")
-
-        # Strip common leading verbs such as 'open'
+        # Strip common leading verbs (English pattern: "open YouTube")
         for prefix in ("open ", "please open ", "could you open "):
             if app.startswith(prefix):
                 app = app[len(prefix):].strip()
-                print(f"[DEBUG] After stripping prefix: '{app}'")
+        
+        # Strip common trailing action words (Hindi/Hinglish pattern: "YouTube open kro")
+        for suffix in (" open kro", " kholo", " chalu kro", " open karo", " karo", " kro", 
+                       " open kar do", " open kar", " chalao", " start kro", " start karo"):
+            if app.endswith(suffix):
+                app = app[:-len(suffix)].strip()
+
 
         # Platform/Website detection - opens in browser if app not installed
         platforms = {
@@ -322,6 +327,7 @@ class Krishna:
             
             # Other
             'google': 'https://www.google.com',
+            'browser': 'https://www.google.com',
             'maps': 'https://maps.google.com',
             'google maps': 'https://maps.google.com',
             'translate': 'https://translate.google.com',
@@ -329,11 +335,11 @@ class Krishna:
         }
 
         # Check if user wants to open a platform/website
-        print(f"[DEBUG] Checking platforms for: '{app}'")
+
         for platform, url in platforms.items():
             # Check exact match or substring
             if platform in app or app in platform:
-                print(f"[DEBUG] Matched platform: '{platform}'")
+
                 webbrowser.open(url)
                 message = f"Opening {platform.title()} in browser."
                 self.speak(message)
@@ -341,7 +347,7 @@ class Krishna:
             # Fuzzy match for speech recognition errors
             ratio = SequenceMatcher(None, app, platform).ratio()
             if ratio > 0.6:
-                print(f"[DEBUG] Fuzzy matched platform: '{platform}' with ratio {ratio:.2f}")
+
                 webbrowser.open(url)
                 message = f"Opening {platform.title()} in browser."
                 self.speak(message)
@@ -363,12 +369,14 @@ class Krishna:
             'terminal': 'powershell.exe',
             'powershell': 'powershell.exe',
             'camera': None,
+            'photo': None,
+            'click photo': None,
             'browser': 'browser'
         }
 
         for key, exe in mapping.items():
             if key in app:
-                if key == 'camera':
+                if key in ['camera', 'photo', 'click photo']:
                     return self.open_camera()
                 if exe == 'browser':
                     return self.open_browser()
@@ -468,10 +476,16 @@ class Krishna:
             return "No media specified."
 
         target = target.lower()
-        # strip leading verbs
+        # strip leading verbs (English pattern: "play hotel california")
         for prefix in ("play ", "please play "):
             if target.startswith(prefix):
                 target = target[len(prefix):].strip()
+        
+        # strip trailing action words (Hindi/Hinglish pattern: "hotel california bajao")
+        for suffix in (" play kro", " play karo", " bajao", " chalao", " sunao", 
+                       " play kar do", " play kar", " laga do", " chala do"):
+            if target.endswith(suffix):
+                target = target[:-len(suffix)].strip()
 
         # Detect if user asked to play on YouTube/online explicitly
         prefer_online = False
@@ -594,10 +608,16 @@ class Krishna:
         if not q:
             return "No filename provided."
 
-        # Remove leading verbs
+        # Remove leading verbs (English pattern: "find document")
         for prefix in ("find ", "search ", "search for ", "locate "):
             if q.startswith(prefix):
                 q = q[len(prefix):].strip()
+        
+        # Remove trailing action words (Hindi/Hinglish pattern: "document dhundo")
+        for suffix in (" dhundo", " khojo", " find kro", " find karo", " search kro", 
+                       " find kar do", " locate kro", " dhoondho"):
+            if q.endswith(suffix):
+                q = q[:-len(suffix)].strip()
 
         target = q.lower()
 
@@ -784,17 +804,32 @@ class Krishna:
 
 
 def main():
-    krishna = Krishna(mode="Microphone", speaker=True)
-    print(f"Krishna Assistant initialized. Say 'Hi Krishna' to activate.")
+    siri = Siri(mode="Microphone", speaker=True)
+    print(f"Siri Assistant initialized. Say 'Hi Siri' to activate.")
     try:
         while True:
             # Wait for wake word
-            if krishna.listen_for_wake_word():
-                krishna.speak("Yes, I'm listening!")
-                # Listen for command
-                query = krishna.listen()
-                if query:
-                    krishna.process_query(query)
+            wake_detected, command_from_wake = siri.listen_for_wake_word()
+            if wake_detected:
+                siri.speak("Yes, I'm listening!")
+                
+                # Enter continuous listening mode
+                active = True
+                while active:
+                    # If command was included in wake phrase, use it
+                    if command_from_wake:
+                        siri.process_query(command_from_wake)
+                        command_from_wake = None  # Clear it
+                    else:
+                        # Listen for command
+                        query = siri.listen()
+                        if query:
+                            # Check for sleep/exit commands
+                            if any(word in query for word in ['sleep', 'go to sleep', 'exit', 'goodbye', 'bye']):
+                                siri.speak("Going to sleep. Say Hi Siri to wake me up.")
+                                active = False
+                            else:
+                                siri.process_query(query)
     except KeyboardInterrupt:
         print("Exiting program...")
         sys.exit(0)

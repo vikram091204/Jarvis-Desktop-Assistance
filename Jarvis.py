@@ -17,15 +17,26 @@ import ctypes
 
 class Siri:
     
-    def __init__(self, mode="Microphone", speaker=True):
+    def __init__(self, mode="Microphone", speaker=True, voice_index=None):
         self.recognizer = sr.Recognizer()
         self.microphone = sr.Microphone()
         self.engine = pyttsx3.init()
         self.power = None
         self.mode = mode
         self.speaker = speaker
+        self.voice_index = voice_index
+        # If a voice index is provided and valid, set the TTS voice
+        try:
+            if voice_index is not None:
+                voices = self.engine.getProperty('voices')
+                if 0 <= int(voice_index) < len(voices):
+                    self.engine.setProperty('voice', voices[int(voice_index)].id)
+                else:
+                    print(f"Voice index {voice_index} out of range. Available: 0..{len(voices)-1}")
+        except Exception as e:
+            print(f"Failed to set voice: {e}")
         self.assistant_name = "Siri"
-        self.user_name = "Abhay"
+        self.user_name = "Vikram"
         self.commands = {
             "hi, hello, sus": self.greet,
             "what's the time, time right now, what is the time, current time, time please": self.tell_time,
@@ -38,6 +49,8 @@ class Siri:
             "open": self.open_app,
             "play, play song, play video, play music": self.play_media,
             "find, search file, search folder, locate": self.find_and_open,
+            "list voices, voices": self.list_voices,
+            "change voice, set voice, voice": self.change_voice,
             "sleep, lock window": self.lock_window,
             "shutdown": self.shutdown,
             "restart": self.restart,
@@ -151,10 +164,13 @@ class Siri:
             for variant in cmd_variants:
                 # Check for exact substring match first (highest priority)
                 if variant in query or query in variant:
-                    ratio = SequenceMatcher(None, query, variant).ratio()
+                    # When the variant appears as a substring in the query
+                    # treat it as a strong match (boost the ratio) so short
+                    # variants like "open" match "open browser" reliably.
+                    ratio = max(SequenceMatcher(None, query, variant).ratio(), 0.95)
                     # Prioritize longer matches (more specific commands)
                     variant_length = len(variant)
-                    
+
                     # Update if better ratio, or same ratio but longer command
                     if ratio > best_ratio or (ratio == best_ratio and variant_length > best_cmd_length):
                         best_ratio = ratio
@@ -174,7 +190,7 @@ class Siri:
 
         # Increased threshold from 0.5 to 0.7 to prevent false matches
         if best_ratio >= 0.7 and best_match:
-            print(f"[DEBUG] Matched command: '{best_variant}' with ratio: {best_ratio:.2f}")
+            # Debug message removed to keep terminal output clean.
             # Try calling the action with the original query first. Many
             # existing actions have no parameters, so catch TypeError and call
             # without arguments in that case.
@@ -211,6 +227,112 @@ class Siri:
         message = f"Today is {today}"
         self.speak(message)
         return message
+
+    def list_voices(self):
+        """List available TTS voices (prints and speaks brief summary)."""
+        try:
+            voices = self.engine.getProperty('voices')
+            if not voices:
+                self.speak("I could not find any voices installed.")
+                return "No voices found."
+
+            # Provide only two options: male and female. Choose the first
+            # available voice that appears to be male and the first female one.
+            male = None
+            female = None
+            for i, v in enumerate(voices):
+                gender = getattr(v, 'gender', None)
+                name = getattr(v, 'name', '')
+                lname = name.lower()
+                if not female and ((gender and 'female' in str(gender).lower()) or 'zira' in lname or 'hazel' in lname):
+                    female = (i, v)
+                if not male and ((gender and 'male' in str(gender).lower()) or 'david' in lname or 'male' in lname):
+                    male = (i, v)
+
+            # Fallback: if genders not found, pick first two distinct voices
+            if not female and voices:
+                female = (0, voices[0])
+            if not male and len(voices) > 1:
+                male = (1, voices[1])
+
+            # Announce the two options
+            if female:
+                self.speak(f"Female voice option: {getattr(female[1],'name',female[1].id)}")
+                print(f"female: [{female[0]}] {getattr(female[1],'name',female[1].id)}")
+            if male:
+                self.speak(f"Male voice option: {getattr(male[1],'name',male[1].id)}")
+                print(f"male: [{male[0]}] {getattr(male[1],'name',male[1].id)}")
+
+            return "Listed male/female voice options."
+        except Exception as e:
+            err = f"Failed to list voices: {e}"
+            self.speak(err)
+            return err
+
+    def change_voice(self, query=None):
+        """Change the TTS voice at runtime. Accepts an index, gender, or name.
+
+        Examples:
+        - "change voice to 1"
+        - "set voice 2"
+        - "change voice to female"
+        - "change voice to zira"
+        """
+        try:
+            voices = self.engine.getProperty('voices')
+            if query:
+                q = query.lower()
+            else:
+                self.speak("Which voice would you like? Say the number or name.")
+                q = self.listen()
+            if not q:
+                return "No voice specified."
+
+            # Only accept 'male' or 'female' options per user's request
+            if 'female' in q:
+                # find first female-like voice
+                for i, v in enumerate(voices):
+                    gender = getattr(v, 'gender', None)
+                    name = getattr(v, 'name', '').lower()
+                    if (gender and 'female' in str(gender).lower()) or 'zira' in name or 'hazel' in name:
+                        self.engine.setProperty('voice', v.id)
+                        self.voice_index = i
+                        msg = f"Voice changed to {getattr(v,'name',v.id)}."
+                        self.speak(msg)
+                        return msg
+                # fallback
+                self.engine.setProperty('voice', voices[0].id)
+                self.voice_index = 0
+                msg = f"Voice changed to {getattr(voices[0],'name',voices[0].id)}."
+                self.speak(msg)
+                return msg
+
+            if 'male' in q:
+                # find first male-like voice
+                for i, v in enumerate(voices):
+                    gender = getattr(v, 'gender', None)
+                    name = getattr(v, 'name', '').lower()
+                    if (gender and 'male' in str(gender).lower()) or 'david' in name:
+                        self.engine.setProperty('voice', v.id)
+                        self.voice_index = i
+                        msg = f"Voice changed to {getattr(v,'name',v.id)}."
+                        self.speak(msg)
+                        return msg
+                # fallback
+                if len(voices) > 1:
+                    self.engine.setProperty('voice', voices[1].id)
+                    self.voice_index = 1
+                    msg = f"Voice changed to {getattr(voices[1],'name',voices[1].id)}."
+                    self.speak(msg)
+                    return msg
+
+            msg = "Please say 'male' or 'female' to change voice. Say 'list voices' to hear options."
+            self.speak(msg)
+            return msg
+        except Exception as e:
+            err = f"Failed to change voice: {e}"
+            self.speak(err)
+            return err
 
     def how_are_you(self):
         message = "I am fine, thank you. How can I assist you today?"
@@ -334,23 +456,128 @@ class Siri:
             'google translate': 'https://translate.google.com',
         }
 
-        # Check if user wants to open a platform/website
+        # Check if user wants to open a platform/website. Prefer launching
+        # a locally installed application if available; otherwise open the
+        # website in the browser.
+
+        # Mapping of platform keys to likely executable names (best-effort).
+        exe_mapping = {
+            'spotify': ['spotify.exe', 'Spotify.exe'],
+            'discord': ['Discord.exe', 'discord.exe'],
+            'telegram': ['Telegram.exe', 'telegram.exe'],
+            'whatsapp': ['WhatsApp.exe', 'WhatsAppDesktop.exe'],
+            'youtube': ['YouTube.exe', 'VLC.exe', 'vlc.exe', 'mpv.exe', 'PotPlayer.exe', 'PotPlayerMini64.exe', 'Kodi.exe'],
+            'vscode': ['Code.exe', 'code.exe'],
+            'code': ['Code.exe', 'code.exe'],
+            'chrome': ['chrome.exe'],
+            'firefox': ['firefox.exe'],
+            'edge': ['msedge.exe', 'msedgewebview2.exe'],
+            'slack': ['slack.exe'],
+            'zoom': ['Zoom.exe', 'zoom.exe'],
+            'steam': ['steam.exe']
+        }
+
+        def find_executable(exe_names):
+            """Try to locate an executable by name. Returns full path or None."""
+            # 1) try shutil.which
+            for name in exe_names:
+                path = shutil.which(name)
+                if path:
+                    return path
+
+            # 2) search common Program Files directories for a matching exe
+            program_dirs = [os.environ.get('ProgramFiles'), os.environ.get('ProgramFiles(x86)'), os.environ.get('LOCALAPPDATA')]
+            checked = set()
+            for base in program_dirs:
+                if not base or base in checked:
+                    continue
+                checked.add(base)
+                for root, dirs, files in os.walk(base):
+                    for f in files:
+                        for candidate in exe_names:
+                            if f.lower() == candidate.lower():
+                                return os.path.join(root, f)
+            return None
 
         for platform, url in platforms.items():
             # Check exact match or substring
             if platform in app or app in platform:
+                # If we have known executables for this platform, try to launch them
+                exe_candidates = exe_mapping.get(platform)
+                if exe_candidates:
+                    exe_path = find_executable(exe_candidates)
+                    if exe_path:
+                        try:
+                            # If this is YouTube, try to pass the site URL to capable players
+                            if platform == 'youtube':
+                                try:
+                                    message = f"Opening {platform.title()}."
+                                    self.speak(message)
+                                    subprocess.Popen([exe_path, 'https://www.youtube.com'])
+                                    return message
+                                except Exception:
+                                    # Try launching without args if the app doesn't accept URL
+                                    try:
+                                        subprocess.Popen([exe_path])
+                                        message = f"Opening {platform.title()}."
+                                        self.speak(message)
+                                        return message
+                                    except Exception:
+                                        pass
+                            else:
+                                message = f"Opening {platform.title()}."
+                                self.speak(message)
+                                subprocess.Popen([exe_path])
+                                return message
+                        except Exception:
+                            # Fall back to opening URL if launching fails
+                            pass
 
-                webbrowser.open(url)
-                message = f"Opening {platform.title()} in browser."
+                # Special-case: try WhatsApp protocol before opening web client
+                if platform == 'whatsapp':
+                    for proto in ('whatsapp://', 'whatsapp://send'):
+                        try:
+                            os.startfile(proto)
+                            message = "Opening WhatsApp application."
+                            self.speak(message)
+                            return message
+                        except Exception:
+                            pass
+
+                # Fuzzy match or no local app found: open the website
+                message = f"Opening {platform.title()}."
                 self.speak(message)
+                webbrowser.open(url)
                 return message
+
             # Fuzzy match for speech recognition errors
             ratio = SequenceMatcher(None, app, platform).ratio()
             if ratio > 0.6:
+                exe_candidates = exe_mapping.get(platform)
+                if exe_candidates:
+                    exe_path = find_executable(exe_candidates)
+                    if exe_path:
+                        try:
+                            message = f"Opening {platform.title()}."
+                            self.speak(message)
+                            subprocess.Popen([exe_path])
+                            return message
+                        except Exception:
+                            pass
+                # Special-case WhatsApp protocol before web fallback
+                if platform == 'whatsapp':
+                    for proto in ('whatsapp://', 'whatsapp://send'):
+                        try:
+                            os.startfile(proto)
+                            message = "Opening WhatsApp application."
+                            self.speak(message)
+                            return message
+                        except Exception:
+                            pass
 
-                webbrowser.open(url)
-                message = f"Opening {platform.title()} in browser."
+                message = f"Opening {platform.title()}."
                 self.speak(message)
+                webbrowser.open(url)
                 return message
 
         mapping = {
@@ -804,7 +1031,8 @@ class Siri:
 
 
 def main():
-    siri = Siri(mode="Microphone", speaker=True)
+    # Default to a female voice (voice_index=2 -> Microsoft Zira on Windows)
+    siri = Siri(mode="Microphone", speaker=True, voice_index=2)
     print(f"Siri Assistant initialized. Say 'Hi Siri' to activate.")
     try:
         while True:

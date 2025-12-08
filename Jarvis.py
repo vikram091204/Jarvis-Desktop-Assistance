@@ -298,19 +298,16 @@ class Siri:
     
     def greet(self):
         message = f"Hi {self.user_name} how may I assist you today?"
-        self.speak(message)
         return message
 
     def tell_time(self):
         now = datetime.datetime.now().strftime("%H:%M:%S")
         message = f"The current time is {now}"
-        self.speak(message)
         return message
 
     def tell_date(self):
         today = datetime.datetime.now().strftime("%A, %B %d, %Y")
         message = f"Today is {today}"
-        self.speak(message)
         return message
 
     def list_voices(self):
@@ -318,8 +315,7 @@ class Siri:
         try:
             voices = self.engine.getProperty('voices')
             if not voices:
-                self.speak("I could not find any voices installed.")
-                return "No voices found."
+                return "I could not find any voices installed."
 
             # Provide only two options: male and female. Choose the first
             # available voice that appears to be male and the first female one.
@@ -351,7 +347,6 @@ class Siri:
             return "Listed male/female voice options."
         except Exception as e:
             err = f"Failed to list voices: {e}"
-            self.speak(err)
             return err
 
     def change_voice(self, query=None):
@@ -383,13 +378,11 @@ class Siri:
                         self.engine.setProperty('voice', v.id)
                         self.voice_index = i
                         msg = f"Voice changed to {getattr(v,'name',v.id)}."
-                        self.speak(msg)
                         return msg
                 # fallback
                 self.engine.setProperty('voice', voices[0].id)
                 self.voice_index = 0
                 msg = f"Voice changed to {getattr(voices[0],'name',voices[0].id)}."
-                self.speak(msg)
                 return msg
 
             if 'male' in q:
@@ -401,63 +394,52 @@ class Siri:
                         self.engine.setProperty('voice', v.id)
                         self.voice_index = i
                         msg = f"Voice changed to {getattr(v,'name',v.id)}."
-                        self.speak(msg)
                         return msg
                 # fallback
                 if len(voices) > 1:
                     self.engine.setProperty('voice', voices[1].id)
                     self.voice_index = 1
                     msg = f"Voice changed to {getattr(voices[1],'name',voices[1].id)}."
-                    self.speak(msg)
                     return msg
 
             msg = "Please say 'male' or 'female' to change voice. Say 'list voices' to hear options."
-            self.speak(msg)
             return msg
         except Exception as e:
             err = f"Failed to change voice: {e}"
-            self.speak(err)
             return err
 
     def how_are_you(self):
         message = "I am fine, thank you. How can I assist you today?"
-        self.speak(message)
         return message
 
     def get_news(self):
         message = "Fetching the latest news for you."
-        self.speak(message)
         webbrowser.open("https://news.google.com/")
         return message
 
     def empty_recycle_bin(self):
         message = "Emptying the recycle bin."
-        self.speak(message)
         settings.recycled("empty")
         return message
 
     def restore_recycle_bin(self):
         message = "Restoring the recycle bin."
-        self.speak(message)
         settings.recycled("restore")
         return message
 
     def where_is(self):
         message = "Please specify the location."
-        self.speak(message)
         location = self.listen()
         webbrowser.open(f"https://www.google.com/maps/place/{location}")
         return f"Opening maps for location: {location}"
 
     def open_camera(self):
         message = "Opening camera."
-        self.speak(message)
         settings.camera()
         return message
 
     def open_browser(self):
         message = "Opening browser."
-        self.speak(message)
         webbrowser.open("https://www.google.com")
         return message
 
@@ -597,7 +579,6 @@ class Siri:
                             if platform == 'youtube':
                                 try:
                                     message = f"Opening {platform.title()}."
-                                    self.speak(message)
                                     subprocess.Popen([exe_path, 'https://www.youtube.com'])
                                     return message
                                 except Exception:
@@ -605,13 +586,11 @@ class Siri:
                                     try:
                                         subprocess.Popen([exe_path])
                                         message = f"Opening {platform.title()}."
-                                        self.speak(message)
                                         return message
                                     except Exception:
                                         pass
                             else:
                                 message = f"Opening {platform.title()}."
-                                self.speak(message)
                                 subprocess.Popen([exe_path])
                                 return message
                         except Exception:
@@ -631,7 +610,6 @@ class Siri:
 
                 # Fuzzy match or no local app found: open the website
                 message = f"Opening {platform.title()}."
-                self.speak(message)
                 webbrowser.open(url)
                 return message
 
@@ -644,7 +622,6 @@ class Siri:
                     if exe_path:
                         try:
                             message = f"Opening {platform.title()}."
-                            self.speak(message)
                             subprocess.Popen([exe_path])
                             return message
                         except Exception:
@@ -661,7 +638,6 @@ class Siri:
                             pass
 
                 message = f"Opening {platform.title()}."
-                self.speak(message)
                 webbrowser.open(url)
                 return message
 
@@ -698,7 +674,6 @@ class Siri:
                         message = f"Opening {key}."
                     except Exception as e:
                         message = f"Failed to open {key}: {e}"
-                    self.speak(message)
                     return message
                 try:
                     subprocess.Popen([exe])
@@ -710,7 +685,6 @@ class Siri:
                         message = f"Opening {key}."
                     else:
                         message = f"Could not find executable for {key}."
-                self.speak(message)
                 return message
 
         # fallback 1: try to find a file matching the query in common folders
@@ -749,14 +723,12 @@ class Siri:
                 message = f"Opening file {os.path.basename(file_match)}."
             except Exception as e:
                 message = f"Found file but failed to open it: {e}"
-            self.speak(message)
             return message
 
         # fallback 2: try to open as a path or executable name
         try:
             os.startfile(app_query)
             message = f"Opening {app_query}."
-            self.speak(message)
             return message
         except Exception:
             exe = shutil.which(app.split()[0])
@@ -764,13 +736,11 @@ class Siri:
                 try:
                     subprocess.Popen([exe])
                     message = f"Opening {app_query}."
-                    self.speak(message)
                     return message
                 except Exception:
                     pass
 
         message = f"Sorry, I couldn't open {app_query}."
-        self.speak(message)
         return message
 
     def play_media(self, query=None):
@@ -809,7 +779,6 @@ class Siri:
 
         # If it's a URL, play it directly
         if target.startswith('http'):
-            self.speak(f"Playing {target} in browser")
             webbrowser.open(target)
             return f"Playing {target}"
 
@@ -853,7 +822,6 @@ class Siri:
                 message = f"Playing {os.path.basename(best[0])}."
             except Exception as e:
                 message = f"Found media but failed to play: {e}"
-            self.speak(message)
             return message
 
         # fallback: try to open any file matching (not just media exts)
@@ -870,13 +838,11 @@ class Siri:
                             message = f"Opening {os.path.basename(path)}."
                         except Exception as e:
                             message = f"Found file but failed to open: {e}"
-                        self.speak(message)
                         return message
 
         # If not found, try to play the top YouTube result (online)
         query_str = target.replace(' ', '+')
         yt_search = f"https://www.youtube.com/results?search_query={query_str}"
-        self.speak(f"I couldn't find a local file. Searching YouTube for {target}.")
         try:
             resp = requests.get(yt_search, headers={"User-Agent": "Mozilla/5.0"}, timeout=8)
             html = resp.text
@@ -896,7 +862,6 @@ class Siri:
                     video_url = 'https://www.youtube.com' + m.group(0)
             if video_url:
                 webbrowser.open(video_url)
-                self.speak(f"Playing {target} on YouTube.")
                 return f"Playing {video_url}"
         except Exception:
             pass
@@ -987,7 +952,6 @@ class Siri:
 
         if not matches:
             msg = f"I couldn't find anything matching {q}."
-            self.speak(msg)
             return msg
 
         # Limit to top 5 matches, sorted by score descending
@@ -1047,40 +1011,34 @@ class Siri:
         except Exception as e:
             msg = f"Found item but failed to open: {e}"
 
-        self.speak(msg)
         return msg
 
     def lock_window(self):
         message = "Locking the window."
-        self.speak(message)
         self.power = threading.Thread(target=settings.power,args=['lock'], daemon=True)
         self.power.start()
         return message
 
     def shutdown(self):
         message = "Shutting down the system in 20 seconds.\nPlease close any opened applications."
-        self.speak(message)
         self.power = threading.Thread(target=settings.power,args=['shutdown'], daemon=True)
         self.power.start()
         return message
 
     def restart(self):
         message = "Restarting the system in 20 seconds.\nPlease close any opened applications."
-        self.speak(message)
         self.power = threading.Thread(target=settings.power,args=['restart'], daemon=True)
         self.power.start()
         return message
 
     def hibernate(self):
         message = "Hibernating the system in 20 seconds."
-        self.speak(message)
         self.power = threading.Thread(target=settings.power,args=['hibernate'], daemon=True)
         self.power.start()
         return message
 
     def log_out(self):
         message = "Signing off the system in 10 seconds.\nPlease close any opened applications."
-        self.speak(message)
         self.power = threading.Thread(target=settings.power,args=['log out'], daemon=True)
         self.power.start()
         return message
@@ -1093,7 +1051,6 @@ class Siri:
 
     def exit(self):
         message = "Exiting program..."
-        self.speak(message)
         time.sleep(1)
         sys.exit(0)
         return message

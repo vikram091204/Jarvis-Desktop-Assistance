@@ -13,6 +13,7 @@ from difflib import SequenceMatcher
 import pyttsx3
 from functions import settings
 import ctypes
+from pathlib import Path
 
 
 class Siri:
@@ -37,6 +38,30 @@ class Siri:
             print(f"Failed to set voice: {e}")
         self.assistant_name = "Siri"
         self.user_name = "Vikram"
+        # Ensure avatar state file exists and (try to) start avatar UI
+        try:
+            data_dir = Path(__file__).parent.joinpath('data')
+            data_dir.mkdir(parents=True, exist_ok=True)
+            state_file = data_dir.joinpath('avatar_state.txt')
+            if not state_file.exists():
+                state_file.write_text('idle')
+
+            # Auto-start avatar.py in a separate process so the floating widget appears
+            avatar_path = Path(__file__).parent.joinpath('avatar.py')
+            if avatar_path.exists():
+                try:
+                    # Use the same Python interpreter
+                    cmd = [sys.executable, str(avatar_path)]
+                    # Start detached process; do not wait
+                    if os.name == 'nt':
+                        DETACHED = 0x00000008
+                        subprocess.Popen(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, creationflags=DETACHED)
+                    else:
+                        subprocess.Popen(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                except Exception:
+                    pass
+        except Exception:
+            pass
         self.commands = {
             "hi, hello, sus": self.greet,
             "what's the time, time right now, what is the time, current time, time please": self.tell_time,
@@ -65,6 +90,15 @@ class Siri:
         if self.mode == "Input":
             return input("Enter command: ").lower()
         
+        # indicate avatar that we're listening (if avatar app is running)
+        try:
+            Path = __import__('pathlib').Path
+            state_file = Path(__file__).parent.joinpath('data', 'avatar_state.txt')
+            state_file.parent.mkdir(parents=True, exist_ok=True)
+            state_file.write_text('listening')
+        except Exception:
+            pass
+
         with self.microphone as source:
             self.recognizer.adjust_for_ambient_noise(source)
             print("Listening...")
@@ -76,9 +110,21 @@ class Siri:
         
         except sr.UnknownValueError:
             self.speak("Sorry, I did not understand that.")
+            try:
+                Path = __import__('pathlib').Path
+                state_file = Path(__file__).parent.joinpath('data', 'avatar_state.txt')
+                state_file.write_text('idle')
+            except Exception:
+                pass
             return ""
         except sr.RequestError:
             self.speak("Sorry, my speech service is down.")
+            try:
+                Path = __import__('pathlib').Path
+                state_file = Path(__file__).parent.joinpath('data', 'avatar_state.txt')
+                state_file.write_text('idle')
+            except Exception:
+                pass
             return ""
         
     def listen_for_wake_word(self):
@@ -88,6 +134,15 @@ class Siri:
             wake_detected, command = self.check_wake_word(user_input)
             return wake_detected, command
         
+        # indicate listening/waiting for wake word
+        try:
+            Path = __import__('pathlib').Path
+            state_file = Path(__file__).parent.joinpath('data', 'avatar_state.txt')
+            state_file.parent.mkdir(parents=True, exist_ok=True)
+            state_file.write_text('listening')
+        except Exception:
+            pass
+
         with self.microphone as source:
             self.recognizer.adjust_for_ambient_noise(source, duration=0.5)
             print("Waiting for wake word 'Hi Siri'...")
@@ -96,12 +151,25 @@ class Siri:
                 query = self.recognizer.recognize_google(audio).lower()
                 print(f"Heard: {query}")
                 wake_detected, command = self.check_wake_word(query)
+                # once we've processed wake-word, go idle
+                try:
+                    Path = __import__('pathlib').Path
+                    state_file = Path(__file__).parent.joinpath('data', 'avatar_state.txt')
+                    state_file.write_text('idle')
+                except Exception:
+                    pass
                 return wake_detected, command
             except sr.UnknownValueError:
                 return False, None
             except sr.RequestError:
                 return False, None
             except Exception:
+                try:
+                    Path = __import__('pathlib').Path
+                    state_file = Path(__file__).parent.joinpath('data', 'avatar_state.txt')
+                    state_file.write_text('idle')
+                except Exception:
+                    pass
                 return False, None
     
     def check_wake_word(self, query):
@@ -129,8 +197,25 @@ class Siri:
         print(text)
         
         if self.speaker:
+            # Notify avatar that we're speaking
+            try:
+                Path = __import__('pathlib').Path
+                state_file = Path(__file__).parent.joinpath('data', 'avatar_state.txt')
+                state_file.parent.mkdir(parents=True, exist_ok=True)
+                state_file.write_text('speaking')
+            except Exception:
+                pass
+
             self.engine.say(text)
             self.engine.runAndWait()
+
+            # Back to idle after speaking
+            try:
+                Path = __import__('pathlib').Path
+                state_file = Path(__file__).parent.joinpath('data', 'avatar_state.txt')
+                state_file.write_text('idle')
+            except Exception:
+                pass
 
     def process_query(self, query):
         """
